@@ -1,0 +1,33 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+model User {
+  id String @id @default(uuid())
+  email String @unique
+  passwordHash String
+  verifiedAt DateTime?
+  createdAt DateTime @default(now())
+  memberships Membership[]
+}
+model Business {
+  id String @id @default(uuid())
+  name String
+  timezone String @default("Africa/Lagos")
+  brandColor String @default("#166534")
+  contact String?
+  tone String @default("friendly")
+  createdAt DateTime @default(now())
+  memberships Membership[]
+}
+model Membership {
+  id String @id @default(uuid())
+  userId String @unique
+  businessId String @unique
+  role String @default("OWNER")
+  user User @relation(fields: [userId], references: [id])
+  business Business @relation(fields: [businessId], references: [id])
+}

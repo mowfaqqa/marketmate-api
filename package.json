@@ -2,10 +2,11 @@
   "name": "@marketmate/api",
   "private": true,
   "scripts": {
-    "start:dev": "tsx watch src/main.ts",
+    "start:dev": "tsc && node --watch dist/main.js",
     "build": "tsc -p tsconfig.json",
     "check": "tsc --noEmit",
-    "prisma": "prisma"
+    "prisma": "prisma",
+    "start": "node dist/main.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.0",

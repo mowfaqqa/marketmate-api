@@ -12,10 +12,18 @@ model User {
   verifiedAt DateTime?
   createdAt DateTime @default(now())
   memberships Membership[]
+  sessions Session[]
+  tokens AccountToken[]
 }
 model Business {
   id String @id @default(uuid())
   name String
+  category String @default("")
+  description String @default("")
+  location String @default("")
+  language String @default("en-NG")
+  version Int @default(0)
+  updatedAt DateTime @updatedAt
   timezone String @default("Africa/Lagos")
   brandColor String @default("#166534")
   contact String?
@@ -30,4 +38,20 @@ model Membership {
   role String @default("OWNER")
   user User @relation(fields: [userId], references: [id])
   business Business @relation(fields: [businessId], references: [id])
+}
+
+model Session {
+  id String @id
+  userId String
+  expiresAt DateTime
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+}
+model AccountToken {
+  id String @id
+  userId String
+  purpose String
+  expiresAt DateTime
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, purpose])
 }

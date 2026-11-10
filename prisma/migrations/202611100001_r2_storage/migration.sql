@@ -1,0 +1,5 @@
+ALTER TABLE "MediaAsset" ADD COLUMN "storageProvider" TEXT NOT NULL DEFAULT 'R2', ADD COLUMN "fullKey" TEXT, ADD COLUMN "previewKey" TEXT;
+UPDATE "MediaAsset" SET "storageProvider" = 'LEGACY_DB' WHERE "content" IS NOT NULL OR "preview" IS NOT NULL;
+ALTER TABLE "MediaAsset" DROP CONSTRAINT "MediaAsset_ready_check";
+ALTER TABLE "MediaAsset" ADD CONSTRAINT "MediaAsset_storage_check" CHECK (("storageProvider" = 'R2' AND "content" IS NULL AND "preview" IS NULL) OR ("storageProvider" = 'LEGACY_DB' AND "fullKey" IS NULL AND "previewKey" IS NULL));
+ALTER TABLE "MediaAsset" ADD CONSTRAINT "MediaAsset_ready_check" CHECK ("status" <> 'READY' OR ("checksum" IS NOT NULL AND "width" IS NOT NULL AND "height" IS NOT NULL AND "bytes" IS NOT NULL AND "width" > 0 AND "height" > 0 AND "width"::bigint * "height" <= 20000000 AND "bytes" > 0 AND (("storageProvider" = 'R2' AND "fullKey" IS NOT NULL AND "previewKey" IS NOT NULL) OR ("storageProvider" = 'LEGACY_DB' AND "content" IS NOT NULL AND "preview" IS NOT NULL))));

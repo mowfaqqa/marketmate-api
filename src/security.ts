@@ -2,7 +2,7 @@ import { randomBytes, scrypt as derive, timingSafeEqual, createHash } from 'node
 import { promisify } from 'node:util';
 const scrypt = promisify(derive);
 export const token = () => randomBytes(32).toString('hex');
-export const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+export const digest = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
 export async function hashPassword(password: string) {
   const salt = randomBytes(16).toString('hex');
   const hash = await scrypt(password, salt, 64) as Buffer;

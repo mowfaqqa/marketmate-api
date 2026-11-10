@@ -6,16 +6,27 @@ import { Database } from './database';
 import { AuthController, SessionGuard, RateGuard } from './auth';
 import { BusinessController } from './business';
 import { Mail } from './mail';
+import { RateLimits } from './rate-limits';
+import { R2Storage } from './r2';
+import { Catalogue, CatalogueController } from './catalogue';
+import { Assets, AssetsController, UploadRateGuard } from './assets';
 @Controller('health')
 class HealthController { @Get() status() { return { status: 'ok', service: 'marketmate-api' }; } }
-@Module({ controllers: [HealthController, AuthController, BusinessController], providers: [Database, Mail, SessionGuard, RateGuard] })
+@Module({ controllers: [HealthController, AuthController, BusinessController, CatalogueController, AssetsController], providers: [Database, Mail, SessionGuard, RateGuard, Catalogue, Assets, UploadRateGuard, RateLimits, R2Storage] })
 class AppModule {}
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  if (process.env.TRUST_PROXY) app.getHttpAdapter().getInstance().set('trust proxy', process.env.TRUST_PROXY);
   const origin = process.env.WEB_ORIGIN || 'http://localhost:3000';
   app.enableCors({ origin, credentials: true });
-  app.use((req: { method: string; headers: Record<string, string> }, res: { status(n: number): { json(v: unknown): void }; setHeader(k: string, v: string): void }, next: () => void) => {
+  const rate = app.get(RateLimits);
+  app.use((req: { ip: string; method: string; headers: Record<string, string> }, res: { status(n: number): { json(v: unknown): void }; setHeader(k: string, v: string): void }, next: () => void) => {
     res.setHeader('Cache-Control', 'no-store');
+    const retryAfter = rate.take('ingress', req.ip, 1200, 60000);
+    if (retryAfter) {
+      res.setHeader('Retry-After', String(retryAfter));
+      res.status(429).json({ message: 'Too many requests. Wait and try again.', retryAfter }); return;
+    }
     if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.headers.origin !== origin) {
       res.status(403).json({ message: 'This request must come from the MarketMate application.' }); return;
     }

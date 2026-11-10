@@ -30,6 +30,7 @@ model Business {
   tone String @default("friendly")
   createdAt DateTime @default(now())
   memberships Membership[]
+  products Product[]
 }
 model Membership {
   id String @id @default(uuid())
@@ -54,4 +55,98 @@ model AccountToken {
   expiresAt DateTime
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@index([userId, purpose])
+}
+
+enum ProductType {
+  PRODUCT
+  SERVICE
+}
+
+enum PricingMode {
+  FIXED
+  INQUIRY
+}
+
+enum AssetStatus {
+  PENDING
+  READY
+  REJECTED
+  DELETING
+}
+
+enum OfferStatus {
+  ENABLED
+  CANCELLED
+}
+
+model Product {
+  id String @id @default(uuid())
+  businessId String
+  type ProductType
+  name String
+  category String @default("")
+  description String @default("")
+  pricingMode PricingMode
+  priceKobo BigInt?
+  currency String @default("NGN")
+  materialSize String @default("")
+  serviceArea String @default("")
+  fulfilmentTerms String @default("")
+  confirmedClaims String @default("")
+  primaryAssetId String?
+  archivedAt DateTime?
+  version Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  business Business @relation(fields: [businessId], references: [id])
+  primaryAsset MediaAsset? @relation("PrimaryAsset", fields: [businessId, primaryAssetId], references: [businessId, id])
+  assets MediaAsset[] @relation("ProductAssets")
+  offers Offer[]
+  @@unique([businessId, id])
+  @@index([businessId, archivedAt, createdAt])
+}
+
+model MediaAsset {
+  id String @id @default(uuid())
+  businessId String
+  productId String
+  objectKey String @unique @default(uuid())
+  storageProvider String @default("R2")
+  fullKey String?
+  previewKey String?
+  status AssetStatus @default(PENDING)
+  uploadTokenHash String
+  rightsConfirmedAt DateTime @default(now())
+  uploadExpiresAt DateTime
+  productVersion Int
+  checksum String?
+  width Int?
+  height Int?
+  bytes Int?
+  content Bytes?
+  preview Bytes?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  product Product @relation("ProductAssets", fields: [businessId, productId], references: [businessId, id])
+  primaryFor Product[] @relation("PrimaryAsset")
+  @@unique([businessId, id])
+  @@index([businessId, productId])
+}
+
+model Offer {
+  id String @id @default(uuid())
+  businessId String
+  productId String
+  promoPriceKobo BigInt
+  assertedPriorPriceKobo BigInt?
+  startsAt DateTime
+  endsAt DateTime
+  terms String @default("")
+  status OfferStatus @default(ENABLED)
+  version Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  product Product @relation(fields: [businessId, productId], references: [businessId, id])
+  @@unique([businessId, id])
+  @@index([businessId, productId, createdAt])
 }

@@ -1,37 +1,35 @@
-import { Body, CanActivate, ConflictException, Controller, ExecutionContext, Get, HttpException, Injectable, Post, Req, Res, UnauthorizedException, UseGuards, BadRequestException } from '@nestjs/common';
+import { Body, CanActivate, ConflictException, Controller, ExecutionContext, Get, Injectable, Post, Req, Res, UnauthorizedException, UseGuards, BadRequestException } from '@nestjs/common';
 import type { User } from '@prisma/client';
 import { Database } from './database';
 import { Mail } from './mail';
 import { checkPassword, digest, hashPassword, token } from './security';
 import { Credentials, EmailInput, TokenInput, ResetInput } from './dto';
-export interface Request { headers: Record<string, string | undefined>; ip: string; user: User; sessionId: string; }
-interface Response { cookie(name: string, value: string, options: Record<string, unknown>): void; }
+import { RateLimits } from './rate-limits';
+export interface Request { headers: Record<string, string | undefined>; ip: string; method: string; user: User; sessionId: string; }
+interface Response { setHeader(name: string, value: string): void; cookie(name: string, value: string, options: Record<string, unknown>): void; }
 const cookieName = 'marketmate_session';
 const cookieOptions = () => ({ httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/' });
 @Injectable()
 export class SessionGuard implements CanActivate {
-  constructor(private readonly db: Database) {}
+  constructor(private readonly db: Database, private readonly rate: RateLimits) {}
   async canActivate(context: ExecutionContext) {
     const req = context.switchToHttp().getRequest<Request>();
     const raw = req.headers.cookie?.split(';').map(x => x.trim()).find(x => x.startsWith(`${cookieName}=`))?.slice(cookieName.length + 1);
     if (!raw || !/^[a-f0-9]{64}$/.test(raw)) throw new UnauthorizedException('Please sign in.');
     const session = await this.db.session.findUnique({ where: { id: digest(raw) }, include: { user: true } });
     if (!session || session.expiresAt <= new Date()) throw new UnauthorizedException('Your session has expired. Please sign in.');
+    const read = ['GET', 'HEAD'].includes(req.method);
+    this.rate.enforce(context.switchToHttp().getResponse<Response>(), read ? 'read' : 'write', session.userId, read ? 240 : 120);
     req.user = session.user; req.sessionId = session.id;
     return true;
   }
 }
 @Injectable()
 export class RateGuard implements CanActivate {
-  private readonly buckets = new Map<string, { count: number; until: number }>();
+  constructor(private readonly rate: RateLimits) {}
   canActivate(context: ExecutionContext) {
     const req = context.switchToHttp().getRequest<Request>();
-    const now = Date.now();
-    for (const [key, bucket] of this.buckets) if (bucket.until < now) this.buckets.delete(key);
-    const key = req.ip;
-    const bucket = this.buckets.get(key) || { count: 0, until: now + 15 * 60000 };
-    bucket.count++; this.buckets.set(key, bucket);
-    if (bucket.count > 30) throw new HttpException('Too many attempts. Please try again in 15 minutes.', 429);
+    this.rate.enforce(context.switchToHttp().getResponse<Response>(), 'auth', req.ip, 30, 15 * 60000);
     return true;
   }
 }

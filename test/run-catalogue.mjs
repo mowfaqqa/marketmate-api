@@ -27,7 +27,7 @@ storage.listen(0, '127.0.0.1');
 await once(storage, 'listening');
 const port = process.env.TEST_API_PORT || '4102';
 const origin = `http://127.0.0.1:${port}`;
-const env = { ...process.env, NODE_ENV: 'test', STUDIO_LOCAL_GENERATOR: 'true', STUDIO_MONTHLY_UNITS: '1', PORT: port, API_HOST: '127.0.0.1', WEB_ORIGIN: 'http://localhost:3000', MAIL_MODE: 'file', MAIL_DIRECTORY: '.local-mail', R2_ACCOUNT_ID: '0'.repeat(32), R2_BUCKET: 'marketmate-test', R2_ACCESS_KEY_ID: 'marketmate-test-key', R2_SECRET_ACCESS_KEY: 'marketmate-test-secret', R2_JURISDICTION: '', R2_TEST_ENDPOINT: `http://127.0.0.1:${storage.address().port}` };
+const env = { ...process.env, NODE_ENV: 'test', STUDIO_LOCAL_GENERATOR: 'true', STUDIO_MONTHLY_UNITS: '4', PORT: port, API_HOST: '127.0.0.1', WEB_ORIGIN: 'http://localhost:3000', MAIL_MODE: 'file', MAIL_DIRECTORY: '.local-mail', R2_ACCOUNT_ID: '0'.repeat(32), R2_BUCKET: 'marketmate-test', R2_ACCESS_KEY_ID: 'marketmate-test-key', R2_SECRET_ACCESS_KEY: 'marketmate-test-secret', R2_JURISDICTION: '', R2_TEST_ENDPOINT: `http://127.0.0.1:${storage.address().port}` };
 const api = spawn(process.execPath, ['dist/main.js'], { cwd: backend, env, stdio: ['ignore', 'pipe', 'pipe'] });
 let startupLog = '';
 api.stdout.on('data', chunk => { startupLog = (startupLog + chunk.toString()).slice(-2500); });
@@ -39,7 +39,7 @@ try {
     await setTimeout(100);
   }
   assert.ok(ready && api.exitCode === null, startupLog || 'Test API could not start.');
-  for (const suite of ['catalogue', 'studio', 'graphics', 'identity']) {
+  for (const suite of ['catalogue', 'studio', 'graphics', 'planner', 'identity']) {
     const test = spawn(process.execPath, [`test/${suite}.mjs`], { cwd: backend, env: { ...env, TEST_ORIGIN: origin }, stdio: 'inherit' });
     const [code] = await once(test, 'exit');
     assert.equal(code, 0, `${suite} suite failed. ${startupLog}`);

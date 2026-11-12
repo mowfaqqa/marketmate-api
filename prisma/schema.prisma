@@ -166,6 +166,7 @@ model StudioJob {
   archived Boolean @default(false)
   createdAt DateTime @default(now())
   drafts StudioDraft[]
+  plannedDay MarketingDay?
   product Product @relation(fields: [businessId, productId], references: [businessId, id])
   @@unique([businessId, key])
   @@index([businessId, period, status])
@@ -200,4 +201,33 @@ model StudioGraphic {
   draft StudioDraft @relation(fields: [draftId], references: [id])
   @@unique([businessId, hash])
   @@index([businessId, period, status])
+}
+
+model MarketingPlan {
+  id String @id @default(uuid())
+  businessId String
+  key String
+  start String
+  goal String
+  productIds String[]
+  createdAt DateTime @default(now())
+  days MarketingDay[]
+  @@unique([businessId, key])
+  @@index([businessId, start])
+}
+
+model MarketingDay {
+  id String @id @default(uuid())
+  planId String
+  date String
+  theme String
+  task String
+  jobId String @unique
+  revision Int @default(0)
+  previousJobIds String[] @default([])
+  completedAt DateTime?
+  completedBy String?
+  plan MarketingPlan @relation(fields: [planId], references: [id])
+  job StudioJob @relation(fields: [jobId], references: [id])
+  @@unique([planId, date])
 }

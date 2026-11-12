@@ -27,6 +27,8 @@ try {
   Object.assign(brief, { productVersion: facts.productVersion, businessVersion: facts.businessVersion });
   const { data: job } = await call('/studio', cookie, 202, brief);
   assert.equal((await call('/studio', cookie, 202, brief)).data.id, job.id);
+  const extraUnits = Number(process.env.STUDIO_MONTHLY_UNITS || 1) - 1;
+  if (extraUnits > 0) await db.studioJob.create({ data: { businessId, productId: product.id, key: randomUUID(), fingerprint: 'test', status: 'ready', period: new Date(job.period), units: extraUnits, facts } });
   const competing = await fetch(origin + '/api/studio', { method: 'POST', headers: { Origin: 'http://localhost:3000', Cookie: cookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ ...brief, key: randomUUID() }) });
   assert.equal(competing.status, 409);
   let result;
@@ -37,7 +39,7 @@ try {
   }
   assert.equal(result.status, 'ready');
   assert.equal(result.drafts.length, 3);
-  assert.equal((await call('/studio', cookie, 200)).data.usage.used, 1);
+  assert.equal((await call('/studio', cookie, 200)).data.usage.used, extraUnits + 1);
   const path = '/studio/' + job.id;
   const draftId = result.drafts[0].id;
   await call(path + '/copy', cookie, 409, { draftId });

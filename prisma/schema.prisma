@@ -102,6 +102,7 @@ model Product {
   primaryAsset MediaAsset? @relation("PrimaryAsset", fields: [businessId, primaryAssetId], references: [businessId, id])
   assets MediaAsset[] @relation("ProductAssets")
   offers Offer[]
+  studioJobs StudioJob[]
   @@unique([businessId, id])
   @@index([businessId, archivedAt, createdAt])
 }
@@ -149,4 +150,37 @@ model Offer {
   product Product @relation(fields: [businessId, productId], references: [businessId, id])
   @@unique([businessId, id])
   @@index([businessId, productId, createdAt])
+}
+
+model StudioJob {
+  id String @id @default(uuid())
+  businessId String
+  productId String
+  key String
+  fingerprint String
+  status String @default("pending")
+  period DateTime
+  units Int
+  facts Json
+  error String?
+  archived Boolean @default(false)
+  createdAt DateTime @default(now())
+  drafts StudioDraft[]
+  product Product @relation(fields: [businessId, productId], references: [businessId, id])
+  @@unique([businessId, key])
+  @@index([businessId, period, status])
+  @@index([status, createdAt])
+}
+
+model StudioDraft {
+  id String @id @default(uuid())
+  jobId String
+  variant Int
+  revision Int
+  text String
+  approvedAt DateTime?
+  approvedBy String?
+  feedback String?
+  job StudioJob @relation(fields: [jobId], references: [id])
+  @@unique([jobId, variant, revision])
 }

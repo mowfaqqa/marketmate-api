@@ -11,9 +11,10 @@ import { R2Storage } from './r2';
 import { Catalogue, CatalogueController } from './catalogue';
 import { Assets, AssetsController, UploadRateGuard } from './assets';
 import { Studio, StudioController } from './studio';
+import { Graphics, GraphicsController } from './graphics';
 @Controller('health')
 class HealthController { @Get() status() { return { status: 'ok', service: 'marketmate-api' }; } }
-@Module({ controllers: [HealthController, AuthController, BusinessController, CatalogueController, AssetsController, StudioController], providers: [Database, Mail, SessionGuard, RateGuard, Catalogue, Assets, UploadRateGuard, RateLimits, R2Storage, Studio] })
+@Module({ controllers: [HealthController, AuthController, BusinessController, CatalogueController, AssetsController, StudioController, GraphicsController], providers: [Database, Mail, SessionGuard, RateGuard, Catalogue, Assets, UploadRateGuard, RateLimits, R2Storage, Studio, Graphics] })
 class AppModule {}
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);

@@ -33,7 +33,7 @@ type Facts = {
 };
 const draftInclude = { drafts: { orderBy: [{ variant: 'asc' as const }, { revision: 'desc' as const }] } };
 const allowance = () => Math.max(0, Number(process.env.STUDIO_MONTHLY_UNITS ?? 25) || 0);
-function monthBounds(anchor: Date, now = new Date()) {
+export function monthBounds(anchor: Date, now = new Date()) {
   const boundary = (offset: number) => {
     const date = new Date(anchor);
     date.setUTCDate(1);
@@ -159,7 +159,7 @@ export class Studio implements OnModuleInit, OnModuleDestroy {
     return job;
   }
 
-  async review(businessId: string, id: string, draftId: string, userId: string, operation: 'edit' | 'approve' | 'copy', text?: string) {
+  async review(businessId: string, id: string, draftId: string, userId: string, operation: 'edit' | 'approve' | 'copy' | 'graphic', text?: string) {
     return this.db.$transaction(async tx => {
       await tx.$queryRaw`SELECT id FROM "StudioJob" WHERE id = ${id} AND "businessId" = ${businessId} FOR UPDATE`;
       const job = await this.owned(businessId, id, tx);
@@ -175,6 +175,16 @@ export class Studio implements OnModuleInit, OnModuleDestroy {
       if (current.productVersion !== facts.productVersion || current.businessVersion !== facts.businessVersion || current.expires !== facts.expires) throw new ConflictException('Product, offer or business facts changed. Start a new draft.');
       if (operation === 'approve') return draft.approvedAt ? draft : tx.studioDraft.update({ where: { id: draft.id }, data: { approvedAt: new Date(), approvedBy: userId } });
       if (!draft.approvedAt) throw new ConflictException('Approve this version before copying it.');
+      if (operation === 'graphic') {
+        const product = await this.catalogue.owned(businessId, job.productId, tx);
+        const business = await tx.business.findUniqueOrThrow({ where: { id: businessId } });
+        if (product.version !== facts.productVersion || business.version !== facts.businessVersion) throw new ConflictException('The source changed. Review a new draft.');
+        return {
+          facts, headline: value.split(/\r?\n|(?<=[.!?])\s/u)[0].trim(),
+          brandColor: business.brandColor, photoId: product.primaryAssetId, productType: product.type,
+          offerTerms: facts.goal === 'offer' ? product.offers[0]?.terms ?? '' : '',
+        };
+      }
       return { text: assemble(value, facts) };
     });
   }

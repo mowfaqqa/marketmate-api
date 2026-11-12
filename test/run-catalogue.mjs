@@ -39,12 +39,12 @@ try {
     await setTimeout(100);
   }
   assert.ok(ready && api.exitCode === null, startupLog || 'Test API could not start.');
-  for (const suite of ['catalogue', 'studio', 'identity']) {
+  for (const suite of ['catalogue', 'studio', 'graphics', 'identity']) {
     const test = spawn(process.execPath, [`test/${suite}.mjs`], { cwd: backend, env: { ...env, TEST_ORIGIN: origin }, stdio: 'inherit' });
     const [code] = await once(test, 'exit');
     assert.equal(code, 0, `${suite} suite failed. ${startupLog}`);
   }
-  assert.equal(objects.size, 2, 'Only the attached full image and preview should remain.');
+  assert.equal(objects.size, 8, 'The attached photo, its preview and six graphics should remain.');
   assert.ok(requests.PUT >= 4 && requests.GET >= 1 && requests.DELETE >= 2);
   console.log('S3-compatible HTTP checks passed: signed writes, private reads and object deletion. No live R2 requests were sent.');
 } finally {

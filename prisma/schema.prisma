@@ -181,6 +181,23 @@ model StudioDraft {
   approvedAt DateTime?
   approvedBy String?
   feedback String?
+  graphics StudioGraphic[]
   job StudioJob @relation(fields: [jobId], references: [id])
   @@unique([jobId, variant, revision])
+}
+
+model StudioGraphic {
+  id String @id @default(uuid())
+  businessId String
+  draftId String
+  hash String
+  specification Json
+  objectKey String
+  status String
+  period DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  draft StudioDraft @relation(fields: [draftId], references: [id])
+  @@unique([businessId, hash])
+  @@index([businessId, period, status])
 }

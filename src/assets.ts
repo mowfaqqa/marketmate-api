@@ -142,6 +142,10 @@ export class Assets {
     if (!['preview', 'full'].includes(size) || !/^\d{13}$/.test(expires || '') || Number(expires) <= Date.now() || Number(expires) > Date.now() + 2 * 60000 || !/^[a-f0-9]{64}$/.test(signature || '')) throw new NotFoundException('This photo link has expired. Reload the page.');
     const expected = this.signature(id, req.sessionId, size, expires);
     if (!timingSafeEqual(Buffer.from(expected), Buffer.from(signature))) throw new NotFoundException('Photo not found.');
+    return this.readOwned(businessId, id, size === 'full' ? 'full' : 'preview');
+  }
+
+  async readOwned(businessId: string, id: string, size: 'full' | 'preview') {
     const asset = await this.db.mediaAsset.findUnique({ where: { businessId_id: { businessId, id } }, select: { status: true, storageProvider: true, fullKey: true, previewKey: true } });
     if (!asset || asset.status !== 'READY') throw new NotFoundException('Photo not found.');
     const key = size === 'full' ? asset.fullKey : asset.previewKey;

@@ -1,0 +1,14 @@
+name: invoice_project
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: marketmate
+      POSTGRES_PASSWORD: local_only_change_me
+      POSTGRES_DB: marketmate
+    ports:
+      - "55433:5432"
+    volumes:
+      - marketmate_data:/var/lib/postgresql/data
+volumes:
+  marketmate_data:

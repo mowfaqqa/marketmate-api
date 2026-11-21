@@ -11,7 +11,10 @@
     "test:sales-unit": "pnpm build && node test/sales-money.mjs",
     "test:sales-pdf": "pnpm build && node test/sales-pdf.mjs",
     "test:ai-unit": "pnpm build && node test/openai.mjs && node test/openai-budget.mjs",
-    "test:marketing-unit": "pnpm build && node test/marketing-completion.mjs"
+    "test:marketing-unit": "pnpm build && node test/marketing-completion.mjs",
+    "check:deps": "node scripts/check-dependencies.mjs",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1166.0",
@@ -35,5 +38,6 @@
     "prisma": "^6.19.0",
     "tsx": "^4.20.0",
     "typescript": "^5.8.3"
-  }
+  },
+  "packageManager": "pnpm@10.18.2"
 }

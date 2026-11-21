@@ -7,8 +7,6 @@ import {
   HttpCode,
   Injectable,
   NotFoundException,
-  OnModuleDestroy,
-  OnModuleInit,
   Param,
   Post,
   Req,
@@ -31,6 +29,9 @@ import { Database } from "./database";
 import { SessionGuard, type Request } from "./auth";
 import { RateLimits } from "./rate-limits";
 import { digest } from "./security";
+import { Facts, validateText, validateDraft, assemble } from "./ai/content";
+import { generationMode, openAIConfig } from "./ai/config";
+export { validateDraft } from "./ai/content";
 
 class Brief {
   @IsUUID() productId!: string;
@@ -57,20 +58,6 @@ class ArchiveInput {
   @IsBoolean() archived!: boolean;
 }
 
-type Facts = {
-  product: string;
-  description: string;
-  productVersion: number;
-  businessVersion: number;
-  brand: string;
-  contact: string;
-  price: number | null;
-  expires: string | null;
-  goal: string;
-  channel: string;
-  tone: string;
-  policy: number;
-};
 const draftInclude = {
   drafts: {
     orderBy: [{ variant: "asc" as const }, { revision: "desc" as const }],
@@ -96,84 +83,17 @@ export function monthBounds(anchor: Date, now = new Date()) {
   if (boundary(offset) > now) offset--;
   return { start: boundary(offset), end: boundary(offset + 1) };
 }
-function validateText(text: string, channel: string) {
-  const limit =
-    channel === "facts"
-      ? Infinity
-      : channel === "whatsapp"
-        ? 600
-        : channel === "description"
-          ? 800
-          : 1200;
-  if (
-    channel !== "facts" &&
-    /\p{Sc}|https?:|\b(?:NGN|naira|kobo)\b|\d{3,}|\d\s*%/iu.test(text)
-  )
-    throw new BadRequestException(
-      "Use saved prices and contacts instead of typing amounts, discounts or links into copy.",
-    );
-  if (text.length > limit)
-    throw new BadRequestException(`Keep the copy within ${limit} characters.`);
-  if (
-    /\b(weapons?|firearms?|gambling|casino|controlled drugs|sexual services|guaranteed profits?|miracle cure|cures?|nafdac approved|vote for)\b/i.test(
-      text,
-    )
-  ) {
-    throw new BadRequestException({
-      code: "RESTRICTED_CONTENT",
-      message:
-        "Remove restricted products or unsupported claims before continuing.",
-    });
-  }
-}
-function assemble(text: string, facts: Facts) {
-  const price =
-    facts.price === null
-      ? "Price on request"
-      : new Intl.NumberFormat("en-NG", {
-          style: "currency",
-          currency: "NGN",
-        }).format(facts.price / 100);
-  const expiry = facts.expires
-    ? `\nOffer ends ${new Intl.DateTimeFormat("en-NG", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Lagos" }).format(new Date(facts.expires))} (Lagos time)`
-    : "";
-  return `${text}\n\n${price}${expiry}\nContact ${facts.brand}: ${facts.contact}`;
-}
-
-export function validateDraft(text: string, facts: Facts) {
-  validateText(text, facts.channel);
-  validateText(assemble(text, facts), "facts");
-  const limit =
-    facts.channel === "whatsapp"
-      ? 600
-      : facts.channel === "description"
-        ? 800
-        : 1200;
-  if (assemble(text, facts).length > limit)
-    throw new BadRequestException(
-      "Shorten your copy to leave room for the saved price and contact details.",
-    );
-}
-
 @Injectable()
-export class Studio implements OnModuleInit, OnModuleDestroy {
-  private timer?: ReturnType<typeof setInterval>;
-  private running = false;
+export class Studio {
   constructor(
     private db: Database,
     private catalogue: Catalogue,
   ) {}
-  onModuleInit() {
-    this.timer = setInterval(() => void this.tick().catch(() => {}), 1000);
-  }
-  onModuleDestroy() {
-    clearInterval(this.timer);
-  }
   get localEnabled() {
-    return (
-      process.env.NODE_ENV !== "production" &&
-      process.env.STUDIO_LOCAL_GENERATOR === "true"
-    );
+    return generationMode() === "local";
+  }
+  get generationEnabled() {
+    return generationMode() !== "disabled";
   }
 
   async usage(businessId: string, tx: Prisma.TransactionClient = this.db) {
@@ -186,9 +106,19 @@ export class Studio implements OnModuleInit, OnModuleDestroy {
       where: { businessId, period: period.start },
       _sum: { units: true },
     });
-    const used = counts.find((row) => row.status === "ready")?._sum.units ?? 0;
+    const plans = await tx.marketingPlan.groupBy({
+      by: ["status"],
+      where: { businessId, period: period.start },
+      _sum: { units: true },
+    });
+    const used =
+      (counts.find((row) => row.status === "ready")?._sum.units ?? 0) +
+      (plans.find((row) => row.status === "ready")?._sum.units ?? 0);
     const reserved =
-      counts.find((row) => row.status === "pending")?._sum.units ?? 0;
+      counts
+        .filter((row) => ["pending", "running"].includes(row.status))
+        .reduce((sum, row) => sum + (row._sum.units ?? 0), 0) +
+      (plans.find((row) => row.status === "pending")?._sum.units ?? 0);
     return {
       used,
       reserved,
@@ -196,6 +126,8 @@ export class Studio implements OnModuleInit, OnModuleDestroy {
       remaining: Math.max(0, allowance() - used - reserved),
       ...period,
       localEnabled: this.localEnabled,
+      generationEnabled: this.generationEnabled,
+      generationMode: generationMode(),
     };
   }
 
@@ -218,9 +150,16 @@ export class Studio implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException("Select a product with an active offer.");
     const offer = input.goal === "offer" ? product.offer : null;
     validateText(
-      [product.name, product.category, product.description, brand.name].join(
-        " ",
-      ),
+      [
+        product.name,
+        product.category,
+        product.description,
+        brand.name,
+        product.materialSize,
+        product.serviceArea,
+        product.fulfilmentTerms,
+        product.confirmedClaims,
+      ].join(" "),
       "facts",
     );
     return {
@@ -235,7 +174,14 @@ export class Studio implements OnModuleInit, OnModuleDestroy {
       goal: input.goal,
       channel: input.channel,
       tone: input.tone,
-      policy: 1,
+      policy: 2,
+      locale: "en-NG",
+      attributes: {
+        materialSize: product.materialSize,
+        serviceArea: product.serviceArea,
+        fulfilmentTerms: product.fulfilmentTerms,
+        confirmedClaims: product.confirmedClaims,
+      },
     };
   }
 
@@ -249,6 +195,7 @@ export class Studio implements OnModuleInit, OnModuleDestroy {
         input.manual,
         input.productVersion,
         input.businessVersion,
+        input.sourceDraftId,
       ]),
     );
     return this.db.$transaction(async (tx) => {
@@ -270,7 +217,7 @@ export class Studio implements OnModuleInit, OnModuleDestroy {
           "Review the current facts before starting a draft.",
         );
       const usage = await this.usage(businessId, tx);
-      if (!input.manual && !this.localEnabled)
+      if (!input.manual && !this.generationEnabled)
         throw new ServiceUnavailableException(
           "Generation is unavailable. You can start a manual draft.",
         );
@@ -301,90 +248,17 @@ export class Studio implements OnModuleInit, OnModuleDestroy {
           period: usage.start,
           units: input.manual ? 0 : 1,
           status: input.manual ? "ready" : "pending",
+          provider: input.manual ? "manual" : generationMode(),
+          model:
+            !input.manual && generationMode() === "openai"
+              ? openAIConfig()!.model
+              : null,
           drafts: input.manual
             ? { create: { variant: 1, revision: 1, text } }
             : undefined,
         },
       });
     });
-  }
-
-  private async tick() {
-    if (this.running) return;
-    this.running = true;
-    try {
-      await this.db.studioJob.updateMany({
-        where: {
-          status: "pending",
-          createdAt: { lt: new Date(Date.now() - 600000) },
-        },
-        data: {
-          status: "failed",
-          error: "This request expired. Start a new draft.",
-        },
-      });
-      if (!this.localEnabled) return;
-      const job = await this.db.studioJob.findFirst({
-        where: { status: "pending" },
-        orderBy: { createdAt: "asc" },
-      });
-      if (!job) return;
-      const facts = job.facts as unknown as Facts;
-      const subject =
-        facts.goal === "offer"
-          ? "See the current offer on"
-          : facts.goal === "launch"
-            ? "Introducing"
-            : "Find out more about";
-      const texts = [
-        `${subject} ${facts.product}. ${facts.description}`.trim(),
-        `Interested in ${facts.product}? Ask ${facts.brand} for details.`,
-        facts.tone === "energetic"
-          ? `Take a look at ${facts.product}!`
-          : facts.tone === "professional"
-            ? `Learn about ${facts.product} from ${facts.brand}.`
-            : `Explore ${facts.product} from ${facts.brand}.`,
-      ];
-      if (facts.channel === "ideas")
-        texts.splice(
-          0,
-          3,
-          `Introduce ${facts.product} in a product spotlight.`,
-          `Invite questions about ${facts.product} in a short post.`,
-          `Feature ${facts.product} in a catalogue roundup.`,
-        );
-      try {
-        if (Date.now() - job.createdAt.getTime() > 600000)
-          throw new Error("Expired");
-        for (const text of texts) validateDraft(text, facts);
-        await this.db.$transaction(async (tx) => {
-          const claimed = await tx.studioJob.updateMany({
-            where: { id: job.id, status: "pending" },
-            data: { status: "ready" },
-          });
-          if (claimed.count)
-            await tx.studioDraft.createMany({
-              data: texts.map((text, index) => ({
-                jobId: job.id,
-                variant: index + 1,
-                revision: 1,
-                text,
-              })),
-            });
-        });
-      } catch {
-        await this.db.studioJob.updateMany({
-          where: { id: job.id, status: "pending" },
-          data: {
-            status: "failed",
-            error:
-              "The draft could not be generated. Try a shorter product description or start a manual draft.",
-          },
-        });
-      }
-    } finally {
-      this.running = false;
-    }
   }
 
   async owned(
@@ -478,6 +352,7 @@ export class Studio implements OnModuleInit, OnModuleDestroy {
           facts,
           headline: value.split(/\r?\n|(?<=[.!?])\s/u)[0].trim(),
           brandColor: business.brandColor,
+          logoKey: business.logoKey,
           photoId: product.primaryAssetId,
           productType: product.type,
           offerTerms:
@@ -529,7 +404,7 @@ export class StudioController {
     this.rate.enforce(res, "studio-start", businessId, 5);
     if (!brief.manual && !req.user.verifiedAt)
       throw new BadRequestException(
-        "Verify your email before generating samples.",
+        "Verify your email before generating content.",
       );
     return this.studio.start(businessId, brief);
   }

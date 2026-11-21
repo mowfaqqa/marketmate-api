@@ -34,7 +34,7 @@ try {
   let result;
   for (let attempt = 0; attempt < 30; attempt++) {
     result = (await call('/studio/' + job.id, cookie, 200)).data;
-    if (result.status !== 'pending') break;
+    if (!['pending', 'running'].includes(result.status)) break;
     await setTimeout(100);
   }
   assert.equal(result.status, 'ready');

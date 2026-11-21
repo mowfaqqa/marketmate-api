@@ -39,14 +39,14 @@ try {
     await setTimeout(100);
   }
   assert.ok(ready && api.exitCode === null, startupLog || 'Test API could not start.');
-  for (const suite of ['catalogue', 'studio', 'graphics', 'planner', 'identity']) {
+  for (const suite of (process.env.TEST_SUITE ? [process.env.TEST_SUITE] : ['catalogue', 'studio', 'graphics', 'planner', 'identity'])) {
     const test = spawn(process.execPath, [`test/${suite}.mjs`], { cwd: backend, env: { ...env, TEST_ORIGIN: origin }, stdio: 'inherit' });
     const [code] = await once(test, 'exit');
     assert.equal(code, 0, `${suite} suite failed. ${startupLog}`);
   }
-  assert.equal(objects.size, 8, 'The attached photo, its preview and six graphics should remain.');
-  assert.ok(requests.PUT >= 4 && requests.GET >= 1 && requests.DELETE >= 2);
-  console.log('S3-compatible HTTP checks passed: signed writes, private reads and object deletion. No live R2 requests were sent.');
+  if (!process.env.TEST_SUITE) assert.equal(objects.size, 8, 'The attached photo, its preview and six graphics should remain.');
+  if (!process.env.TEST_SUITE) assert.ok(requests.PUT >= 4 && requests.GET >= 1 && requests.DELETE >= 2);
+  console.log(process.env.TEST_SUITE ? `${process.env.TEST_SUITE} suite passed using local S3-compatible storage. No live R2 requests were sent.` : 'S3-compatible HTTP checks passed: signed writes, private reads and object deletion. No live R2 requests were sent.');
 } finally {
   api.kill();
   storage.closeAllConnections();

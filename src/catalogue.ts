@@ -1,3 +1,4 @@
+import { lockBusiness, requireProductCapacity } from './capacity';
 import { BadRequestException, Body, ConflictException, Controller, Get, Injectable, NotFoundException, Param, ParseUUIDPipe, Patch, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { Database } from './database';
@@ -63,7 +64,16 @@ export class Catalogue {
       return productView(existing);
     }
     try {
-      return productView(await this.db.product.create({ data: { ...data, id: input.clientId, businessId }, include: productInclude }));
+      return await this.db.$transaction(async tx => {
+        await lockBusiness(tx, businessId);
+        const retry = await tx.product.findUnique({ where: { businessId_id: { businessId, id: input.clientId } }, include: productInclude });
+        if (retry) {
+          if (!Object.entries(data).every(([key, value]) => retry[key as keyof typeof retry] === value)) throw new ConflictException('This product was saved with different details.');
+          return productView(retry);
+        }
+        await requireProductCapacity(tx, businessId);
+        return productView(await tx.product.create({ data: { ...data, id: input.clientId, businessId }, include: productInclude }));
+      });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         const retry = await this.db.product.findUnique({ where: { businessId_id: { businessId, id: input.clientId } }, include: productInclude });
@@ -103,6 +113,9 @@ export class Catalogue {
 
   async archive(businessId: string, id: string, input: ArchiveInput) {
     return this.db.$transaction(async tx => {
+      await lockBusiness(tx, businessId);
+      const current = await this.owned(businessId, id, tx);
+      if (!input.archived && current.archivedAt) await requireProductCapacity(tx, businessId);
       await this.bump(tx, businessId, id, input.version);
       return productView(await tx.product.update({ where: { businessId_id: { businessId, id } }, data: { archivedAt: input.archived ? new Date() : null }, include: productInclude }));
     });

@@ -2,7 +2,10 @@ import 'reflect-metadata';
 import 'dotenv/config';
 import { Controller, Get, Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { LogoController } from './logo';
 import { Database } from './database';
+import { DashboardController } from './dashboard';
 import { AuthController, SessionGuard, RateGuard } from './auth';
 import { BusinessController } from './business';
 import { Mail } from './mail';
@@ -13,9 +16,14 @@ import { Assets, AssetsController, UploadRateGuard } from './assets';
 import { Studio, StudioController } from './studio';
 import { Graphics, GraphicsController } from './graphics';
 import { Planner, PlannerController } from './planner';
+import { OpenAIGeneration } from './ai/generation.service';
+import { GenerationWorker } from './ai/generation-worker';
+import { Sales } from './sales/sales.service';
+import { SalesPdf } from './sales/sales-pdf.service';
+import { CustomersController, SalesController, PaymentsController } from './sales/sales.controller';
 @Controller('health')
 class HealthController { @Get() status() { return { status: 'ok', service: 'marketmate-api' }; } }
-@Module({ controllers: [HealthController, AuthController, BusinessController, CatalogueController, AssetsController, StudioController, GraphicsController, PlannerController], providers: [Database, Mail, SessionGuard, RateGuard, Catalogue, Assets, UploadRateGuard, RateLimits, R2Storage, Studio, Graphics, Planner] })
+@Module({ controllers: [LogoController, DashboardController, HealthController, AuthController, BusinessController, CatalogueController, AssetsController, StudioController, GraphicsController, PlannerController, CustomersController, SalesController, PaymentsController], providers: [Database, Mail, SessionGuard, RateGuard, Catalogue, Assets, UploadRateGuard, RateLimits, R2Storage, Studio, Graphics, Planner, Sales, SalesPdf, OpenAIGeneration, GenerationWorker] })
 class AppModule {}
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -37,6 +45,12 @@ async function bootstrap() {
   });
   app.setGlobalPrefix('api');
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
+  if (process.env.NODE_ENV !== 'production' || process.env.SWAGGER_ENABLED === 'true') {
+    const config = new DocumentBuilder().setTitle('MarketMate API').setVersion('1.0')
+      .setDescription('Owner-scoped API. Sign in through the web app to establish the HttpOnly session. Mutations require an Origin matching WEB_ORIGIN. Sales creation and financial actions require an Idempotency-Key. Monetary values are integer NGN kobo. Sales DTO schemas are documented; older feature schemas are being completed incrementally.')
+      .addCookieAuth('marketmate_session').build();
+    SwaggerModule.setup('api/docs', app, SwaggerModule.createDocument(app, config), { swaggerOptions: { supportedSubmitMethods: [] } });
+  }
   app.enableShutdownHooks();
   await app.listen(Number(process.env.PORT || 4100), process.env.API_HOST || '127.0.0.1');
 }

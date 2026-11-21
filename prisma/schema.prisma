@@ -26,11 +26,17 @@ model Business {
   updatedAt DateTime @updatedAt
   timezone String @default("Africa/Lagos")
   brandColor String @default("#166534")
+  logoKey String?
   contact String?
   tone String @default("friendly")
   createdAt DateTime @default(now())
   memberships Membership[]
   products Product[]
+  customers Customer[]
+  salesDocuments SalesDocument[]
+  salesActions SalesAction[]
+  invoiceSequence Int @default(0)
+  quotationSequence Int @default(0)
 }
 model Membership {
   id String @id @default(uuid())
@@ -162,6 +168,13 @@ model StudioJob {
   period DateTime
   units Int
   facts Json
+  provider String @default("local")
+  model String?
+  leaseToken String?
+  leaseUntil DateTime?
+  planBatchId String?
+  planBatch MarketingPlan? @relation("PlanGeneration", fields: [planBatchId], references: [id], onDelete: Restrict)
+  aiAttempts AiAttempt[]
   error String?
   archived Boolean @default(false)
   createdAt DateTime @default(now())
@@ -171,6 +184,7 @@ model StudioJob {
   @@unique([businessId, key])
   @@index([businessId, period, status])
   @@index([status, createdAt])
+  @@index([planBatchId])
 }
 
 model StudioDraft {
@@ -210,6 +224,10 @@ model MarketingPlan {
   start String
   goal String
   productIds String[]
+  status String @default("ready")
+  period DateTime?
+  units Int @default(0)
+  generationJobs StudioJob[] @relation("PlanGeneration")
   createdAt DateTime @default(now())
   days MarketingDay[]
   @@unique([businessId, key])
@@ -230,4 +248,147 @@ model MarketingDay {
   plan MarketingPlan @relation(fields: [planId], references: [id])
   job StudioJob @relation(fields: [jobId], references: [id])
   @@unique([planId, date])
+}
+
+model Customer {
+  id String @id @default(uuid())
+  businessId String
+  name String
+  phone String @default("")
+  email String @default("")
+  address String @default("")
+  version Int @default(0)
+  createdAt DateTime @default(now())
+  business Business @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  documents SalesDocument[]
+  @@unique([businessId, id])
+  @@index([businessId, name])
+}
+
+model SalesDocument {
+  id String @id @default(uuid())
+  businessId String
+  customerId String
+  type String
+  status String @default("DRAFT")
+  number String?
+  version Int @default(0)
+  seller Json
+  buyer Json
+  lines Json
+  totals Json
+  totalKobo BigInt
+  paidKobo BigInt @default(0)
+  dueDate String
+  issueDate String?
+  issuedAt DateTime?
+  issuedBy String?
+  taxConfirmed Boolean @default(false)
+  notes String @default("")
+  paymentInstructions String @default("")
+  voidReason String?
+  voidedAt DateTime?
+  voidedBy String?
+  sourceQuotationId String? @unique
+  sourceQuotation SalesDocument? @relation("Conversion", fields: [sourceQuotationId], references: [id], onDelete: Restrict)
+  convertedInvoice SalesDocument? @relation("Conversion")
+  replacesId String? @unique
+  replaces SalesDocument? @relation("Replacement", fields: [replacesId], references: [id], onDelete: Restrict)
+  replacement SalesDocument? @relation("Replacement")
+  pdfStatus String @default("NONE")
+  pdfRevision Int @default(0)
+  pdfToken String?
+  pdfLeaseUntil DateTime?
+  pdfKey String?
+  pdfError String?
+  templateVersion Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  customer Customer @relation(fields: [businessId, customerId], references: [businessId, id], onDelete: Restrict)
+  business Business @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  payments ManualPayment[]
+  @@unique([businessId, id])
+  @@unique([businessId, number])
+  @@index([businessId, createdAt, id])
+  @@index([pdfStatus, pdfLeaseUntil])
+}
+
+model ManualPayment {
+  id String @id @default(uuid())
+  businessId String
+  documentId String
+  amountKobo BigInt
+  date String
+  method String
+  reference String @default("")
+  recordedBy String
+  createdAt DateTime @default(now())
+  document SalesDocument @relation(fields: [businessId, documentId], references: [businessId, id], onDelete: Restrict)
+  reversal PaymentReversal?
+  @@unique([businessId, id])
+}
+
+model PaymentReversal {
+  id String @id @default(uuid())
+  paymentId String @unique
+  reason String
+  recordedBy String
+  createdAt DateTime @default(now())
+  payment ManualPayment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+}
+
+model SalesAction {
+  id String @id @default(uuid())
+  businessId String
+  key String
+  fingerprint String
+  result Json
+  createdAt DateTime @default(now())
+  business Business @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  @@unique([businessId, key])
+}
+
+
+model AiBudgetDay {
+  date String @id
+  reservedMicros BigInt @default(0)
+  spentMicros BigInt @default(0)
+  alerted Boolean @default(false)
+  attempts AiAttempt[]
+}
+
+model AiAttempt {
+  id String @id @default(uuid())
+  jobId String
+  day String
+  status String @default("pending")
+  model String
+  promptVersion Int
+  policyVersion Int
+  priceVersion String
+  inputRate Float
+  outputRate Float
+  reservedMicros BigInt
+  costMicros BigInt?
+  inputTokens Int?
+  outputTokens Int?
+  latencyMs Int?
+  providerRequestId String?
+  providerResponseId String?
+  actualModel String?
+  createdAt DateTime @default(now())
+  settledAt DateTime?
+  job StudioJob @relation(fields: [jobId], references: [id], onDelete: Restrict)
+  budget AiBudgetDay @relation(fields: [day], references: [date], onDelete: Restrict)
+  @@index([jobId, createdAt])
+  @@index([status, createdAt])
+}
+
+// Counts reserved and stored objects; failed/uncertain writes retain their capacity until deletion.
+model StoredObject {
+  key String @id
+  businessId String
+  bytes Int
+  createdAt DateTime @default(now())
+  @@index([businessId])
 }

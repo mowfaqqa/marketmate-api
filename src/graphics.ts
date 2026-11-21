@@ -21,7 +21,7 @@ type Headers = { setHeader(name: string, value: string): void };
 const maxPng = 12 * 1024 * 1024;
 const escapeMarkup = (value: string) => value.replace(/[&<>]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[char]!);
 
-export async function renderGraphic(spec: Spec, photo?: Buffer) {
+export async function renderGraphic(spec: Spec, photo?: Buffer, logo?: Buffer) {
   const width = 1080;
   const height = spec.format === 'story' ? 1920 : 1080;
   const accent = spec.brandColor;
@@ -44,7 +44,10 @@ export async function renderGraphic(spec: Spec, photo?: Buffer) {
     }
     throw new BadRequestException('Text does not fit this layout. Shorten the draft headline or update the source details.');
   };
-  await text(spec.facts.brand, 34, 26, 62, 86, foreground, true);
+  if (logo) {
+    layers.push({ input: await sharp(logo).resize(86, 86, { fit: 'contain', background: '#ffffff00' }).png().toBuffer(), left: 72, top: 52 });
+  }
+  await text(spec.facts.brand, 34, 26, 62, 86, foreground, true, logo ? 184 : 72, logo ? 824 : 936);
   const imageTop = 165;
   const imageHeight = height === 1920 ? 900 : 408;
   const imageWidth = service ? 780 : 936;
@@ -88,7 +91,7 @@ export class Graphics {
     const rgb = /^#[0-9a-f]{6}$/i.test(color) ? [1, 3, 5].map(index => parseInt(color.slice(index, index + 2), 16) / 255) : [1, 1, 1];
     const luminance = rgb.map(value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
     const contrast = 1.05 / (0.2126 * luminance[0] + 0.7152 * luminance[1] + 0.0722 * luminance[2] + 0.05);
-    return { ...source, facts: source.facts, brandColor: contrast >= 5 ? color : '#166534', draftId: input.draftId, layout: input.layout, format: input.format, jobId, templateVersion: 1 };
+    return { ...source, facts: source.facts, brandColor: contrast >= 5 ? color : '#166534', draftId: input.draftId, layout: input.layout, format: input.format, jobId, templateVersion: 2 };
   }
 
   async create(req: Request, jobId: string, input: GraphicInput, response: Headers, rate: RateLimits) {
@@ -120,7 +123,8 @@ export class Graphics {
     let uploaded = false;
     try {
       const photo = spec.photoId ? await this.assets.readOwned(businessId, spec.photoId, 'full') : undefined;
-      const png = await renderGraphic(spec, photo);
+      const logo = spec.logoKey ? await this.storage.get(spec.logoKey, 10 * 1024 * 1024) : undefined;
+      const png = await renderGraphic(spec, photo, logo);
       if (png.length > maxPng) throw new BadRequestException('The graphic is too large. Try a different photo.');
       const current = await this.specification(businessId, jobId, req.user.id, input);
       if (digest(JSON.stringify(current)) !== hash) throw new ConflictException('The source changed. Render a new graphic.');

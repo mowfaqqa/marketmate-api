@@ -1,3 +1,5 @@
+import { Database } from './database';
+import { reserveStorage } from './capacity';
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
@@ -7,7 +9,7 @@ export class R2Storage {
   private readonly bucket?: string;
   private readonly logger = new Logger(R2Storage.name);
 
-  constructor() {
+  constructor(private readonly db: Database) {
     const { R2_ACCOUNT_ID, R2_BUCKET, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_TEST_ENDPOINT, R2_JURISDICTION } = process.env;
     if (!R2_ACCOUNT_ID || !R2_BUCKET || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY) return;
     if (!/^[a-f0-9]{32}$/i.test(R2_ACCOUNT_ID)) throw new Error('R2_ACCOUNT_ID must be the Cloudflare account ID.');
@@ -28,12 +30,15 @@ export class R2Storage {
   }
 
   requireConfigured() {
-    if (!this.client || !this.bucket) throw new ServiceUnavailableException('Photo storage is not configured yet. Your product details are still available.');
+    if (!this.client || !this.bucket) throw new ServiceUnavailableException('Cloudflare R2 storage is not configured yet. Your saved details are still available.');
     return { client: this.client, bucket: this.bucket };
   }
 
   async put(key: string, bytes: Buffer, contentType: string) {
     const { client, bucket } = this.requireConfigured();
+    const businessId = /^businesses\/([^/]+)\//.exec(key)?.[1];
+    if (!businessId) throw new Error('Storage keys must belong to a business.');
+    await this.db.$transaction(tx => reserveStorage(tx, businessId, key, bytes.length));
     try {
       await client.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: bytes, ContentType: contentType, ContentLength: bytes.length, CacheControl: 'private, no-store' }), { abortSignal: AbortSignal.timeout(15000) });
     } catch {
@@ -59,6 +64,7 @@ export class R2Storage {
     const { client, bucket } = this.requireConfigured();
     try {
       await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }), { abortSignal: AbortSignal.timeout(15000) });
+      await this.db.storedObject.deleteMany({ where: { key } });
     } catch {
       throw new ServiceUnavailableException('File removal is pending. Please retry.');
     }

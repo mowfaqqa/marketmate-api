@@ -5,6 +5,8 @@
     "start:dev": "tsc && node --watch dist/main.js",
     "build": "tsc -p tsconfig.json",
     "check": "tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "prisma": "prisma",
     "start": "node dist/main.js",
     "test:sales": "node test/run-sales.mjs",
@@ -36,6 +38,7 @@
   "devDependencies": {
     "@types/node": "^22.15.0",
     "@types/pdfkit": "^0.17.7",
+    "prettier": "3.10.1",
     "prisma": "^6.19.0",
     "tsx": "^4.20.0",
     "typescript": "^5.8.3"

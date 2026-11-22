@@ -44,7 +44,9 @@ export class LineInput {
   @ApiProperty() @IsString() @Matches(/^(0|1)(\.\d{1,4})?$/) taxRate = "0";
 }
 export class DocumentInput {
-  @ApiProperty({ enum: ["INVOICE", "QUOTATION"] }) @IsIn(["INVOICE", "QUOTATION"]) type!: "INVOICE" | "QUOTATION";
+  @ApiProperty({ enum: ["INVOICE", "QUOTATION"] })
+  @IsIn(["INVOICE", "QUOTATION"])
+  type!: "INVOICE" | "QUOTATION";
   @ApiProperty() @IsUUID() customerId!: string;
   @ApiProperty() @IsString() @Matches(/^\d{4}-\d{2}-\d{2}$/) dueDate!: string;
   @ApiProperty({ type: [LineInput], minItems: 1, maxItems: 50 })
@@ -82,8 +84,7 @@ export class ListQuery {
   @ApiProperty() @Type(() => Number) @IsInt() @Min(1) @Max(100000) page = 1;
   @ApiProperty() @IsString() @Length(0, 120) search = "";
   @ApiPropertyOptional() @IsOptional() @IsIn(["INVOICE", "QUOTATION"]) type?:
-    | "INVOICE"
-    | "QUOTATION";
+    "INVOICE" | "QUOTATION";
   @ApiPropertyOptional()
   @IsOptional()
   @IsIn(["DRAFT", "ISSUED", "VOID", "PAID", "PARTIAL", "UNPAID", "OVERDUE"])

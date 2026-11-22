@@ -39,9 +39,7 @@ export function renderSalesPdf(sale: PdfSale): Promise<Buffer> {
     doc.on("error", reject);
     doc.registerFont(
       "Body",
-      require.resolve(
-        "@fontsource/noto-sans/files/noto-sans-latin-400-normal.woff",
-      ),
+      require.resolve("@fontsource/noto-sans/files/noto-sans-latin-400-normal.woff"),
     );
     doc.font("Body").fontSize(10);
     const text = (value: string, size = 10) => {

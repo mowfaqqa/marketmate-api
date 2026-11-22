@@ -348,7 +348,7 @@ export async function callOpenAI(
   } catch (error) {
     result.error = new GenerationError(
       error instanceof Error &&
-      ["TimeoutError", "AbortError"].includes(error.name)
+        ["TimeoutError", "AbortError"].includes(error.name)
         ? "timeout"
         : "provider_error",
       "The AI request could not be completed. No user unit is charged. Try again later or use a manual draft.",

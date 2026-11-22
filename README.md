@@ -13,6 +13,8 @@ pnpm start:dev
 
 For deployment, run `pnpm install --frozen-lockfile`, `pnpm db:generate` and `pnpm build`. Apply migrations with `pnpm exec prisma migrate deploy` and start with `pnpm start`. Run `pnpm check` for type checking.
 
+Run `pnpm format` to format the codebase with Prettier, or `pnpm format:check` to check formatting without changing files.
+
 Authentication, business profiles, catalogue, Marketing Studio, graphics and the planner are implemented. Studio and Planner now include an OpenAI Responses integration plus an explicitly labelled development-only local generator. OpenAI remains disabled until server configuration is complete; live-model and database integration tests are deferred. See docs/marketmate/pr-live-marketing-generation.md. The sales-document implementation adds customers, quotation/invoice drafts, issuance, manual payments, reversals and private PDFs. Its database-backed validation remains pending; see docs/marketmate/pr-sales-documents.md.
 
 The browser uses the same-origin `/api` proxy; `API_ORIGIN` defaults to `http://127.0.0.1:4100`. `WEB_ORIGIN` must exactly match the browser origin. Sessions use HttpOnly, SameSite=Strict cookies, with Secure enabled in production. Serve production through HTTPS.
@@ -28,7 +30,6 @@ Database migrations are under `prisma/migrations`. Use `pnpm prisma migrate depl
 Product photos use private Cloudflare R2. Follow the [R2 setup guide](docs/marketmate/r2-setup.md) before trying a live upload. To check installed dependency versions and resolution, run `node scripts/check-dependencies.mjs`. With the test database migrated and backend built, run `node test/run-catalogue.mjs` to test the API with synthetic accounts and a local S3-compatible server.
 
 Limits per API process: 1,200 requests/minute per incoming IP, 240 reads and 120 writes/minute per signed-in owner, 30 account actions/15 minutes per IP, and 30 upload requests/minute per owner. Limited requests return `429` and `Retry-After`. Behind a proxy, configure `TRUST_PROXY` with the actual trusted forwarding IPs or CIDRs and have the proxy replace untrusted forwarding headers; without that setting, IP limits apply to the immediate peer. Use a shared limiter before running multiple API instances.
-
 
 ## Sales documents
 

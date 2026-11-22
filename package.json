@@ -12,6 +12,7 @@
     "test:sales-pdf": "pnpm build && node test/sales-pdf.mjs",
     "test:ai-unit": "pnpm build && node test/openai.mjs && node test/openai-budget.mjs",
     "test:marketing-unit": "pnpm build && node test/marketing-completion.mjs",
+    "test:mail": "pnpm build && node test/mail.mjs",
     "check:deps": "node scripts/check-dependencies.mjs",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev"

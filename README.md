@@ -17,7 +17,7 @@ Authentication, business profiles, catalogue, Marketing Studio, graphics and the
 
 The browser uses the same-origin `/api` proxy; `API_ORIGIN` defaults to `http://127.0.0.1:4100`. `WEB_ORIGIN` must exactly match the browser origin. Sessions use HttpOnly, SameSite=Strict cookies, with Secure enabled in production. Serve production through HTTPS.
 
-Development emails are saved to `.local-mail/` with restricted permissions when `MAIL_MODE=file`. Open the link in the newest message for your test email. This directory is ignored by Git. Production disables file delivery and requires `BREVO_API_KEY`, `MAIL_FROM`, a verified sender and an approved HTTPS `WEB_ORIGIN`. Real email delivery is unverified.
+Development emails are saved to `.local-mail/` with restricted permissions when `MAIL_MODE=file`. Open the link in the newest message for your test email. This directory is ignored by Git. Set `MAIL_MODE=brevo`, `BREVO_API_KEY` and `MAIL_FROM` for real verification and password-reset emails; see the [Brevo setup guide](docs/marketmate/brevo-setup.md). Production requires Brevo delivery and an HTTPS `WEB_ORIGIN`. Run `pnpm test:mail` for offline adapter checks; real delivery still requires a configured Brevo account and an inbox test.
 
 `pnpm start:dev` compiles and starts the API; run `pnpm build` after backend edits to trigger the process watcher.
 

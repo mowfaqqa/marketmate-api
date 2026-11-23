@@ -1,7 +1,18 @@
 import { Body, Controller, HttpCode, Ip, Post, Res } from "@nestjs/common";
-import { ApiNoContentResponse, ApiProperty, ApiTags } from "@nestjs/swagger";
+import {
+  ApiNoContentResponse,
+  ApiProperty,
+  ApiPropertyOptional,
+  ApiTags,
+} from "@nestjs/swagger";
 import { Transform } from "class-transformer";
-import { IsEmail, IsString, Length, MaxLength } from "class-validator";
+import {
+  IsEmail,
+  IsOptional,
+  IsString,
+  Length,
+  MaxLength,
+} from "class-validator";
 import { Database } from "../infrastructure/database";
 import { RateLimits, type HeaderResponse } from "../infrastructure/rate-limits";
 
@@ -27,6 +38,17 @@ class JoinWaitlistDto {
     message: "Describe your business in up to 250 characters.",
   })
   businessType!: string;
+
+  @ApiPropertyOptional({ maxLength: 1000 })
+  @Transform(({ value }) =>
+    typeof value === "string" ? value.trim() || null : value,
+  )
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000, {
+    message: "Describe your challenges in up to 1,000 characters.",
+  })
+  challenges?: string | null;
 }
 
 @ApiTags("Waitlist")
@@ -48,7 +70,12 @@ export class WaitlistController {
     this.limits.enforce(res, "waitlist", ip, 20);
     await this.db.waitlistEntry.createMany({
       data: [
-        { email: body.email, name: body.name, businessType: body.businessType },
+        {
+          email: body.email,
+          name: body.name,
+          businessType: body.businessType,
+          challenges: body.challenges,
+        },
       ],
       skipDuplicates: true,
     });

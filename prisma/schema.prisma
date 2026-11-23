@@ -392,3 +392,8 @@ model StoredObject {
   createdAt DateTime @default(now())
   @@index([businessId])
 }
+
+model WaitlistEntry {
+  email     String   @id
+  createdAt DateTime @default(now())
+}

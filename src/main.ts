@@ -2,11 +2,10 @@ import "reflect-metadata";
 import "dotenv/config";
 import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
-import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";
-import { AppModule } from "./app.module";
+import { WaitlistModule } from "./waitlist/waitlist.module";
 import { RateLimits } from "./infrastructure/rate-limits";
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(WaitlistModule);
   if (process.env.TRUST_PROXY)
     app
       .getHttpAdapter()
@@ -58,25 +57,6 @@ async function bootstrap() {
       transform: true,
     }),
   );
-  if (
-    process.env.NODE_ENV !== "production" ||
-    process.env.SWAGGER_ENABLED === "true"
-  ) {
-    const config = new DocumentBuilder()
-      .setTitle("MarketMate API")
-      .setVersion("1.0")
-      .setDescription(
-        "Owner-scoped API. Sign in through the web app to establish the HttpOnly session. Mutations require an Origin matching WEB_ORIGIN. Sales creation and financial actions require an Idempotency-Key. Monetary values are integer NGN kobo. Sales DTO schemas are documented; older feature schemas are being completed incrementally.",
-      )
-      .addCookieAuth("marketmate_session")
-      .build();
-    SwaggerModule.setup(
-      "api/docs",
-      app,
-      SwaggerModule.createDocument(app, config),
-      { swaggerOptions: { supportedSubmitMethods: [] } },
-    );
-  }
   app.enableShutdownHooks();
   await app.listen(
     Number(process.env.PORT || 4100),

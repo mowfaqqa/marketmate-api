@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const require = createRequire(import.meta.url);
-const { Mail } = require('../dist/mail.js');
+const { Mail } = require('../dist/auth/mail.js');
 const { Logger } = require('@nestjs/common');
 const savedEnv = { ...process.env };
 const savedFetch = globalThis.fetch;

@@ -1,3 +1,4 @@
+import { lagosToday } from "../infrastructure/lagos-date";
 import {
   BadRequestException,
   ConflictException,
@@ -6,8 +7,8 @@ import {
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { createHash } from "node:crypto";
-import { Database } from "../database";
-import { calculate, lagosToday, validDate } from "./money";
+import { Database } from "../infrastructure/database";
+import { calculate, validDate } from "./money";
 import {
   CustomerInput,
   CustomerUpdate,

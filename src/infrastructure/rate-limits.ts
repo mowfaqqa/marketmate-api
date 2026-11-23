@@ -1,6 +1,6 @@
 import { HttpException, Injectable } from '@nestjs/common';
 
-type Headers = { setHeader(name: string, value: string): void };
+export type HeaderResponse = { setHeader(name: string, value: string): void };
 @Injectable()
 export class RateLimits {
   private readonly entries = new Map<string, { count: number; expiresAt: number }>();
@@ -24,7 +24,7 @@ export class RateLimits {
     return 0;
   }
 
-  enforce(response: Headers, scope: string, subject: string, limit: number, windowMs = 60000) {
+  enforce(response: HeaderResponse, scope: string, subject: string, limit: number, windowMs = 60000) {
     const retryAfter = this.take(scope, subject, limit, windowMs);
     if (!retryAfter) return;
     response.setHeader('Retry-After', String(retryAfter));

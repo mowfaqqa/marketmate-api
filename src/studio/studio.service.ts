@@ -1,62 +1,18 @@
+import { Feedback, ArchiveInput } from "./studio.dto";
 import {
   BadRequestException,
-  Body,
   ConflictException,
-  Controller,
-  Get,
-  HttpCode,
   Injectable,
   NotFoundException,
-  Param,
-  Post,
-  Req,
-  Res,
   ServiceUnavailableException,
-  UseGuards,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
-import {
-  IsBoolean,
-  IsIn,
-  IsInt,
-  IsOptional,
-  IsString,
-  IsUUID,
-  Length,
-} from "class-validator";
-import { Catalogue, productView } from "./catalogue";
-import { Database } from "./database";
-import { SessionGuard, type Request } from "./auth";
-import { RateLimits } from "./rate-limits";
-import { digest } from "./security";
-import { Facts, validateText, validateDraft, assemble } from "./ai/content";
-import { generationMode, openAIConfig } from "./ai/config";
-export { validateDraft } from "./ai/content";
-
-class Brief {
-  @IsUUID() productId!: string;
-  @IsUUID() key!: string;
-  @IsIn(["inquiries", "offer", "launch"]) goal!: string;
-  @IsIn(["instagram", "whatsapp", "description", "ideas"]) channel!: string;
-  @IsIn(["friendly", "professional", "energetic"]) tone!: string;
-  @IsBoolean() manual!: boolean;
-  @IsOptional() @IsInt() productVersion?: number;
-  @IsOptional() @IsInt() businessVersion?: number;
-  @IsOptional() @IsUUID() sourceDraftId?: string;
-}
-class DraftInput {
-  @IsUUID() draftId!: string;
-  @IsString() @Length(1, 1200) text!: string;
-}
-class DraftId {
-  @IsUUID() draftId!: string;
-}
-class Feedback extends DraftId {
-  @IsIn(["facts", "language"]) issue!: string;
-}
-class ArchiveInput {
-  @IsBoolean() archived!: boolean;
-}
+import { Catalogue, productView } from "../catalogue/catalogue.service";
+import { Database } from "../infrastructure/database";
+import { digest } from "../auth/security";
+import { Facts, validateText, validateDraft, assemble } from "../ai/content";
+import { generationMode, openAIConfig } from "../ai/config";
+import { Brief } from "./studio.dto";
 
 const draftInclude = {
   drafts: {
@@ -362,25 +318,13 @@ export class Studio {
       return { text: assemble(value, facts) };
     });
   }
-}
 
-@Controller("studio")
-@UseGuards(SessionGuard)
-export class StudioController {
-  constructor(
-    private studio: Studio,
-    private catalogue: Catalogue,
-    private db: Database,
-    private rate: RateLimits,
-  ) {}
-  @Get()
-  async list(@Req() req: Request) {
-    const businessId = await this.catalogue.businessId(req);
+  async list(businessId: string) {
     return {
       total: await this.db.studioJob.count({
         where: { businessId, archived: false },
       }),
-      usage: await this.studio.usage(businessId),
+      usage: await this.usage(businessId),
       jobs: await this.db.studioJob.findMany({
         where: { businessId },
         orderBy: { createdAt: "desc" },
@@ -388,83 +332,8 @@ export class StudioController {
       }),
     };
   }
-  @Post("preview")
-  async preview(@Req() req: Request, @Body() brief: Brief) {
-    return this.studio.facts(await this.catalogue.businessId(req), brief);
-  }
-  @Post()
-  @HttpCode(202)
-  async start(
-    @Req() req: Request,
-    @Res({ passthrough: true })
-    res: { setHeader(name: string, value: string): void },
-    @Body() brief: Brief,
-  ) {
-    const businessId = await this.catalogue.businessId(req);
-    this.rate.enforce(res, "studio-start", businessId, 5);
-    if (!brief.manual && !req.user.verifiedAt)
-      throw new BadRequestException(
-        "Verify your email before generating content.",
-      );
-    return this.studio.start(businessId, brief);
-  }
-  @Get(":id")
-  async get(@Req() req: Request, @Param("id") id: string) {
-    return this.studio.owned(await this.catalogue.businessId(req), id);
-  }
-  @Post(":id/edit")
-  async edit(
-    @Req() req: Request,
-    @Param("id") id: string,
-    @Body() input: DraftInput,
-  ) {
-    return this.studio.review(
-      await this.catalogue.businessId(req),
-      id,
-      input.draftId,
-      req.user.id,
-      "edit",
-      input.text,
-    );
-  }
-  @Post(":id/approve")
-  async approve(
-    @Req() req: Request,
-    @Param("id") id: string,
-    @Body() input: DraftId,
-  ) {
-    return this.studio.review(
-      await this.catalogue.businessId(req),
-      id,
-      input.draftId,
-      req.user.id,
-      "approve",
-    );
-  }
-  @Post(":id/copy")
-  async copy(
-    @Req() req: Request,
-    @Param("id") id: string,
-    @Body() input: DraftId,
-  ) {
-    return this.studio.review(
-      await this.catalogue.businessId(req),
-      id,
-      input.draftId,
-      req.user.id,
-      "copy",
-    );
-  }
-  @Post(":id/feedback")
-  async feedback(
-    @Req() req: Request,
-    @Param("id") id: string,
-    @Body() input: Feedback,
-  ) {
-    const job = await this.studio.owned(
-      await this.catalogue.businessId(req),
-      id,
-    );
+  async feedback(businessId: string, id: string, input: Feedback) {
+    const job = await this.owned(businessId, id);
     if (!job.drafts.some((draft) => draft.id === input.draftId))
       throw new NotFoundException("Draft version not found.");
     await this.db.studioDraft.update({
@@ -473,16 +342,8 @@ export class StudioController {
     });
     return { saved: true };
   }
-  @Post(":id/archive")
-  async archive(
-    @Req() req: Request,
-    @Param("id") id: string,
-    @Body() input: ArchiveInput,
-  ) {
-    const job = await this.studio.owned(
-      await this.catalogue.businessId(req),
-      id,
-    );
+  async archive(businessId: string, id: string, input: ArchiveInput) {
+    const job = await this.owned(businessId, id);
     return this.db.studioJob.update({ where: { id: job.id }, data: input });
   }
 }

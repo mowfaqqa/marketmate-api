@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { StudioJob } from "@prisma/client";
-import { Database } from "../database";
+import { Database } from "../infrastructure/database";
 import { Facts } from "./content";
 import { costMicros, openAIConfig, OpenAIConfig } from "./config";
 import {

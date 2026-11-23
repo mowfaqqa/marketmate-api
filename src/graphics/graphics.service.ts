@@ -1,23 +1,24 @@
-import { BadRequestException, Body, ConflictException, Controller, Get, Injectable, NotFoundException, Param, ParseUUIDPipe, Post, Query, Req, Res, StreamableFile, UseGuards } from '@nestjs/common';
-import { IsIn, IsUUID } from 'class-validator';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import sharp, { type OverlayOptions } from 'sharp';
-import { Assets } from './assets';
-import { SessionGuard, type Request } from './auth';
-import { Catalogue } from './catalogue';
-import { Database } from './database';
-import { R2Storage } from './r2';
-import { RateLimits } from './rate-limits';
-import { digest } from './security';
-import { monthBounds, Studio } from './studio';
+import { Assets } from '../assets/assets.service';
+import { currentBusinessId, type Request } from '../auth/session.guard';
+import { Database } from '../infrastructure/database';
+import { R2Storage } from '../infrastructure/r2';
+import { RateLimits } from '../infrastructure/rate-limits';
+import { digest } from '../auth/security';
+import { monthBounds, Studio } from '../studio/studio.service';
 
-class GraphicInput {
-  @IsUUID() draftId!: string;
-  @IsIn(['spotlight', 'offer', 'service']) layout!: 'spotlight' | 'offer' | 'service';
-  @IsIn(['square', 'story']) format!: 'square' | 'story';
-}
+import { GraphicInput } from './graphics.dto';
+import type { HeaderResponse as Headers } from '../infrastructure/rate-limits';
+
 type Spec = Awaited<ReturnType<Graphics['specification']>>;
-type Headers = { setHeader(name: string, value: string): void };
+
 const maxPng = 12 * 1024 * 1024;
 const escapeMarkup = (value: string) => value.replace(/[&<>]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[char]!);
 
@@ -78,7 +79,7 @@ export async function renderGraphic(spec: Spec, photo?: Buffer, logo?: Buffer) {
 
 @Injectable()
 export class Graphics {
-  constructor(private db: Database, private catalogue: Catalogue, private studio: Studio, private assets: Assets, private storage: R2Storage) {}
+  constructor(private db: Database, private studio: Studio, private assets: Assets, private storage: R2Storage) {}
 
   async specification(businessId: string, jobId: string, userId: string, input: GraphicInput) {
     const source = await this.studio.review(businessId, jobId, input.draftId, userId, 'graphic');
@@ -95,7 +96,7 @@ export class Graphics {
   }
 
   async create(req: Request, jobId: string, input: GraphicInput, response: Headers, rate: RateLimits) {
-    const businessId = await this.catalogue.businessId(req);
+    const businessId = currentBusinessId(req);
     rate.enforce(response, 'graphic-render', businessId, 8);
     const spec = await this.specification(businessId, jobId, req.user.id, input);
     const hash = digest(JSON.stringify(spec));
@@ -145,7 +146,7 @@ export class Graphics {
   }
 
   async file(req: Request, id: string) {
-    const businessId = await this.catalogue.businessId(req);
+    const businessId = currentBusinessId(req);
     const graphic = await this.db.studioGraphic.findFirst({ where: { id, businessId, status: 'ready' } });
     if (!graphic) throw new NotFoundException('Graphic not found.');
     const spec = graphic.specification as unknown as Spec;
@@ -158,23 +159,5 @@ export class Graphics {
     const file = await this.storage.get(graphic.objectKey, maxPng);
     await validate();
     return file;
-  }
-}
-
-@Controller()
-@UseGuards(SessionGuard)
-export class GraphicsController {
-  constructor(private graphics: Graphics, private rate: RateLimits) {}
-
-  @Post('studio/:jobId/graphics')
-  create(@Req() req: Request, @Param('jobId', ParseUUIDPipe) jobId: string, @Body() input: GraphicInput, @Res({ passthrough: true }) res: Headers) {
-    return this.graphics.create(req, jobId, input, res, this.rate);
-  }
-
-  @Get('studio/graphics/:id/file')
-  async file(@Req() req: Request, @Param('id', ParseUUIDPipe) id: string, @Query('download') download: string | undefined, @Res({ passthrough: true }) res: Headers) {
-    this.rate.enforce(res, 'graphic-file', req.user.id, 30);
-    const file = await this.graphics.file(req, id);
-    return new StreamableFile(file, { type: 'image/png', disposition: `${download === '1' ? 'attachment' : 'inline'}; filename="marketmate-${id}.png"` });
   }
 }

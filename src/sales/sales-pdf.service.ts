@@ -6,8 +6,8 @@ import {
   OnModuleInit,
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import { Database } from "../database";
-import { R2Storage } from "../r2";
+import { Database } from "../infrastructure/database";
+import { R2Storage } from "../infrastructure/r2";
 import { Sales } from "./sales.service";
 import { renderSalesPdf } from "./pdf";
 @Injectable()

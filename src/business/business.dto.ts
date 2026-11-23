@@ -1,11 +1,15 @@
-import { IsEmail, IsHexColor, IsIn, IsInt, IsString, Matches, MaxLength, Min, MinLength, Validate, ValidatorConstraint, ValidatorConstraintInterface } from 'class-validator';
-export class Credentials {
-  @IsEmail() @MaxLength(254) email!: string;
-  @IsString() @MinLength(12) @MaxLength(128) password!: string;
-}
-export class EmailInput { @IsEmail() @MaxLength(254) email!: string; }
-export class TokenInput { @IsString() @Matches(/^[a-f0-9]{64}$/) token!: string; }
-export class ResetInput extends TokenInput { @IsString() @MinLength(12) @MaxLength(128) password!: string; }
+import {
+  IsHexColor,
+  IsIn,
+  IsInt,
+  IsString,
+  MaxLength,
+  Min,
+  MinLength,
+  Validate,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
+} from 'class-validator';
 @ValidatorConstraint()
 class ContactValidator implements ValidatorConstraintInterface {
   validate(value: unknown) {

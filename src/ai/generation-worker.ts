@@ -5,7 +5,7 @@ import {
   OnModuleInit,
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import { Database } from "../database";
+import { Database } from "../infrastructure/database";
 import { Facts, localSamples } from "./content";
 import { generationMode } from "./config";
 import { OpenAIGeneration } from "./generation.service";

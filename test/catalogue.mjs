@@ -6,7 +6,7 @@ import { PrismaClient } from '@prisma/client';
 import sharp from 'sharp';
 config({ path: new URL('../.env', import.meta.url), quiet: true });
 const require = createRequire(import.meta.url);
-const { prepareImage } = require('../dist/assets.js');
+const { prepareImage } = require('../dist/assets/image.js');
 const db = new PrismaClient();
 const base = process.env.TEST_ORIGIN || 'http://localhost:3000';
 const origin = 'http://localhost:3000';

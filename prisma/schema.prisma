@@ -394,6 +394,8 @@ model StoredObject {
 }
 
 model WaitlistEntry {
+  name         String? @db.VarChar(100)
+  businessType String? @db.VarChar(250)
   email     String   @id
   createdAt DateTime @default(now())
 }

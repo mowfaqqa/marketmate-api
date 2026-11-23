@@ -15,11 +15,12 @@ for (const address of [new URL(web), new URL(api), database]) {
 assert.match(database.pathname, /test/i);
 const db = new PrismaClient({ datasourceUrl: database.href });
 const email = `release-${randomUUID()}@example.com`;
+const details = { name: "  Amina Bello ", businessType: " Handmade bags " };
 const submit = (body, origin = web) =>
   fetch(web + "/api/waitlist", {
     method: "POST",
     headers: { "Content-Type": "application/json", Origin: origin },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...details, ...body }),
   });
 try {
   for (const path of [
@@ -65,6 +66,16 @@ try {
     });
     assert.equal(disabled.status, 404);
   }
+  for (const invalid of [
+    { name: undefined },
+    { businessType: undefined },
+    { name: "  " },
+    { businessType: "  " },
+    { name: "a".repeat(101) },
+    { businessType: "a".repeat(251) },
+  ]) {
+    assert.equal((await submit({ email, ...invalid })).status, 400);
+  }
   assert.equal((await submit({ email: "invalid" })).status, 400);
   assert.equal((await submit({ email, unexpected: true })).status, 400);
   assert.equal((await submit({ email }, "https://example.org")).status, 403);
@@ -76,6 +87,19 @@ try {
   );
   for (const response of responses) assert.equal(response.status, 204);
   assert.equal(await db.waitlistEntry.count({ where: { email } }), 1);
+  assert.equal(
+    (
+      await submit({
+        email,
+        name: "Someone else",
+        businessType: "Different business",
+      })
+    ).status,
+    204,
+  );
+  const entry = await db.waitlistEntry.findUniqueOrThrow({ where: { email } });
+  assert.equal(entry.name, details.name.trim());
+  assert.equal(entry.businessType, details.businessType.trim());
   let response;
   for (let attempt = 0; attempt < 21; attempt++) {
     response = await submit({ email });

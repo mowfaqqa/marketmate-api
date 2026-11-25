@@ -1,4 +1,9 @@
-import { randomBytes, scrypt as derive, timingSafeEqual, createHash } from 'node:crypto';
+import {
+  randomBytes,
+  scrypt as derive,
+  timingSafeEqual,
+  createHash,
+} from 'node:crypto';
 import { promisify } from 'node:util';
 const scrypt = promisify(derive);
 export const token = () => randomBytes(32).toString('hex');

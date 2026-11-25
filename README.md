@@ -55,3 +55,7 @@ Settings supports private logo uploads and displays active-product/storage allow
 Approved promotions support device sharing with download/copy fallbacks. Profiles, existing products, Studio captions and unfinished Planner items autosave after a one-second pause. Conflicts preserve the current text for review; unsaved edits remain only in the current tab.
 
 `pnpm test:marketing-unit` runs offline capacity, R2 adapter and logo checks. Migration `202611180001_marketing_completion` is prepared but has not been applied.
+
+## NestJS structure
+
+`src/main.ts` configures HTTP, validation and Swagger. `src/app.module.ts` composes the feature modules. Register a controller or provider in its owning feature and export a provider only when another feature injects it. The infrastructure module owns the Prisma client, R2 storage and rate limiter. The AI module owns the generation worker. Authenticated business routes use the membership loaded by the session guard.

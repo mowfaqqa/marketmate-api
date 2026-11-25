@@ -1,50 +1,24 @@
+import { lagosToday } from "../infrastructure/lagos-date";
 import {
   BadRequestException,
-  Body,
   ConflictException,
-  Controller,
-  Get,
   Injectable,
   NotFoundException,
-  Param,
-  ParseUUIDPipe,
-  Patch,
-  Post,
-  Req,
-  Res,
   ServiceUnavailableException,
-  UseGuards,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
-import {
-  ArrayMaxSize,
-  ArrayMinSize,
-  ArrayUnique,
-  IsArray,
-  IsBoolean,
-  IsIn,
-  IsInt,
-  IsOptional,
-  IsString,
-  IsUUID,
-  Length,
-  Matches,
-  Min,
-} from "class-validator";
 import { randomUUID } from "node:crypto";
-import { SessionGuard, type Request } from "./auth";
-import { Catalogue, productView } from "./catalogue";
-import { Database } from "./database";
-import { RateLimits } from "./rate-limits";
-import { Studio, validateDraft } from "./studio";
-import { generationMode, openAIConfig } from "./ai/config";
+import { currentBusinessId, type Request } from "../auth/session.guard";
+import { Catalogue, productView } from "../catalogue/catalogue.service";
+import { Database } from "../infrastructure/database";
+import { Studio } from "../studio/studio.service";
+import { validateDraft } from "../ai/content";
+import { generationMode, openAIConfig } from "../ai/config";
 
-const goals = ["inquiries", "offer", "launch"];
-const channels = ["instagram", "whatsapp"];
+import { PlanInput, DayInput, Completion, channels } from "./planner.dto";
+
 const dayMs = 86400000;
-const datePattern = /^\d{4}-\d{2}-\d{2}$/;
-const localToday = () =>
-  new Date(Date.now() + 3600000).toISOString().slice(0, 10);
+
 const dateOffset = (date: string, offset: number) =>
   new Date(Date.parse(date + "T00:00:00Z") + offset * dayMs)
     .toISOString()
@@ -80,34 +54,6 @@ const include = {
     },
   },
 };
-type Headers = { setHeader(name: string, value: string): void };
-
-class PlanInput {
-  @IsUUID() key!: string;
-  @Matches(datePattern) start!: string;
-  @IsIn(goals) goal!: string;
-  @IsArray()
-  @ArrayMinSize(1)
-  @ArrayMaxSize(5)
-  @ArrayUnique()
-  @IsUUID(undefined, { each: true })
-  productIds!: string[];
-}
-class DayInput {
-  @IsInt() @Min(0) revision!: number;
-  @Matches(datePattern) date!: string;
-  @IsIn(channels) channel!: string;
-  @IsUUID() productId!: string;
-  @IsString() @Length(1, 180) task!: string;
-  @IsOptional() @IsString() @Length(1, 1200) text?: string;
-  @IsBoolean() swap!: boolean;
-  @IsBoolean() regenerate!: boolean;
-  @IsBoolean() confirmDoneEdit!: boolean;
-}
-class Completion {
-  @IsInt() @Min(0) revision!: number;
-  @IsBoolean() done!: boolean;
-}
 
 @Injectable()
 export class Planner {
@@ -262,7 +208,7 @@ export class Planner {
 
   async list(businessId: string) {
     return {
-      today: localToday(),
+      today: lagosToday(),
       enabled: this.studio.generationEnabled,
       usage: await this.studio.usage(businessId),
       plans: await this.db.marketingPlan.findMany({
@@ -275,7 +221,7 @@ export class Planner {
   }
 
   async create(req: Request, input: PlanInput) {
-    const businessId = await this.catalogue.businessId(req);
+    const businessId = currentBusinessId(req);
     return this.db.$transaction(async (tx) => {
       await this.lock(tx, businessId);
       const where = { businessId_key: { businessId, key: input.key } };
@@ -291,7 +237,7 @@ export class Planner {
         return existing;
       }
       this.requireGeneration(req);
-      const today = localToday();
+      const today = lagosToday();
       if (
         !Number.isFinite(Date.parse(input.start)) ||
         dateOffset(input.start, 0) !== input.start ||
@@ -348,7 +294,7 @@ export class Planner {
   }
 
   async edit(req: Request, planId: string, dayId: string, input: DayInput) {
-    const businessId = await this.catalogue.businessId(req);
+    const businessId = currentBusinessId(req);
     return this.db.$transaction(async (tx) => {
       await this.lock(tx, businessId);
       const plan = await this.plan(tx, businessId, planId);
@@ -458,7 +404,7 @@ export class Planner {
     dayId: string,
     input: Completion,
   ) {
-    const businessId = await this.catalogue.businessId(req);
+    const businessId = currentBusinessId(req);
     return this.db.$transaction(async (tx) => {
       await this.lock(tx, businessId);
       const plan = await this.plan(tx, businessId, planId);
@@ -485,54 +431,5 @@ export class Planner {
       });
       return this.plan(tx, businessId, planId);
     });
-  }
-}
-
-@Controller("planner")
-@UseGuards(SessionGuard)
-export class PlannerController {
-  constructor(
-    private planner: Planner,
-    private catalogue: Catalogue,
-    private rate: RateLimits,
-  ) {}
-
-  @Get()
-  async list(@Req() req: Request) {
-    return this.planner.list(await this.catalogue.businessId(req));
-  }
-
-  @Post()
-  create(
-    @Req() req: Request,
-    @Body() input: PlanInput,
-    @Res({ passthrough: true }) res: Headers,
-  ) {
-    this.rate.enforce(res, "plan-create", req.user.id, 5);
-    return this.planner.create(req, input);
-  }
-
-  @Patch(":plan/days/:day")
-  edit(
-    @Req() req: Request,
-    @Param("plan", ParseUUIDPipe) plan: string,
-    @Param("day", ParseUUIDPipe) day: string,
-    @Body() input: DayInput,
-    @Res({ passthrough: true }) res: Headers,
-  ) {
-    this.rate.enforce(res, "plan-edit", req.user.id, 20);
-    return this.planner.edit(req, plan, day, input);
-  }
-
-  @Patch(":plan/days/:day/completion")
-  complete(
-    @Req() req: Request,
-    @Param("plan", ParseUUIDPipe) plan: string,
-    @Param("day", ParseUUIDPipe) day: string,
-    @Body() input: Completion,
-    @Res({ passthrough: true }) res: Headers,
-  ) {
-    this.rate.enforce(res, "plan-completion", req.user.id, 30);
-    return this.planner.complete(req, plan, day, input);
   }
 }

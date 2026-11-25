@@ -1,7 +1,16 @@
 import { Database } from './database';
 import { reserveStorage } from './capacity';
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
-import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 
 @Injectable()
 export class R2Storage {

@@ -89,8 +89,7 @@ export function calculate(lines: SalesLine[], deliveryKobo: number) {
   };
 }
 export type Totals = ReturnType<typeof calculate>["totals"];
-export const lagosToday = () =>
-  new Date(Date.now() + 3600000).toISOString().slice(0, 10);
+
 export function validDate(value: string) {
   return (
     /^\d{4}-\d{2}-\d{2}$/.test(value) &&

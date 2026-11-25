@@ -1,0 +1,4 @@
+CREATE TABLE "WaitlistEntry" (
+  "email" TEXT PRIMARY KEY,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

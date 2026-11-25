@@ -14,8 +14,11 @@ import {
   Res,
   UseGuards,
 } from "@nestjs/common";
-import { SessionGuard, type Request } from "../auth";
-import { Catalogue } from "../catalogue";
+import {
+  currentBusinessId,
+  SessionGuard,
+  type Request,
+} from "../auth/session.guard";
 import { Sales } from "./sales.service";
 import { SalesPdf } from "./sales-pdf.service";
 import {
@@ -36,17 +39,16 @@ import {
 @UseGuards(SessionGuard)
 export class CustomersController {
   constructor(
-    private readonly catalogue: Catalogue,
     private readonly sales: Sales,
   ) {}
   @Get() async list(@Req() req: Request, @Query() query: ListQuery) {
-    return this.sales.customers(await this.catalogue.businessId(req), query);
+    return this.sales.customers(currentBusinessId(req), query);
   }
   @Get(":id") async get(
     @Req() req: Request,
     @Param("id", ParseUUIDPipe) id: string,
   ) {
-    return this.sales.getCustomer(await this.catalogue.businessId(req), id);
+    return this.sales.getCustomer(currentBusinessId(req), id);
   }
   @ApiHeader({
     name: "Idempotency-Key",
@@ -60,7 +62,7 @@ export class CustomersController {
     @Body() input: CustomerInput,
   ) {
     return this.sales.createCustomer(
-      await this.catalogue.businessId(req),
+      currentBusinessId(req),
       key,
       input,
     );
@@ -71,7 +73,7 @@ export class CustomersController {
     @Body() input: CustomerUpdate,
   ) {
     return this.sales.updateCustomer(
-      await this.catalogue.businessId(req),
+      currentBusinessId(req),
       id,
       input,
     );
@@ -83,12 +85,11 @@ export class CustomersController {
 @UseGuards(SessionGuard)
 export class SalesController {
   constructor(
-    private readonly catalogue: Catalogue,
     private readonly sales: Sales,
     private readonly pdf: SalesPdf,
   ) {}
   @Get() async list(@Req() req: Request, @Query() query: ListQuery) {
-    return this.sales.list(await this.catalogue.businessId(req), query);
+    return this.sales.list(currentBusinessId(req), query);
   }
   @ApiHeader({
     name: "Idempotency-Key",
@@ -101,20 +102,20 @@ export class SalesController {
     @Headers("idempotency-key") key: string,
     @Body() input: DocumentInput,
   ) {
-    return this.sales.create(await this.catalogue.businessId(req), key, input);
+    return this.sales.create(currentBusinessId(req), key, input);
   }
   @Get(":id") async get(
     @Req() req: Request,
     @Param("id", ParseUUIDPipe) id: string,
   ) {
-    return this.sales.get(await this.catalogue.businessId(req), id);
+    return this.sales.get(currentBusinessId(req), id);
   }
   @Patch(":id") async update(
     @Req() req: Request,
     @Param("id", ParseUUIDPipe) id: string,
     @Body() input: DocumentUpdate,
   ) {
-    return this.sales.update(await this.catalogue.businessId(req), id, input);
+    return this.sales.update(currentBusinessId(req), id, input);
   }
   @Delete(":id") async remove(
     @Req() req: Request,
@@ -122,7 +123,7 @@ export class SalesController {
     @Body() input: VersionInput,
   ) {
     return this.sales.remove(
-      await this.catalogue.businessId(req),
+      currentBusinessId(req),
       id,
       input.version,
     );
@@ -136,7 +137,7 @@ export class SalesController {
     @Body() input: IssueInput,
   ) {
     return this.sales.issue(
-      await this.catalogue.businessId(req),
+      currentBusinessId(req),
       id,
       req.user.id,
       key,
@@ -152,7 +153,7 @@ export class SalesController {
     @Body() input: VersionInput,
   ) {
     return this.sales.convert(
-      await this.catalogue.businessId(req),
+      currentBusinessId(req),
       id,
       key,
       input.version,
@@ -167,7 +168,7 @@ export class SalesController {
     @Body() input: VersionInput,
   ) {
     return this.sales.convert(
-      await this.catalogue.businessId(req),
+      currentBusinessId(req),
       id,
       key,
       input.version,
@@ -183,7 +184,7 @@ export class SalesController {
     @Body() input: ReasonInput,
   ) {
     return this.sales.void(
-      await this.catalogue.businessId(req),
+      currentBusinessId(req),
       id,
       req.user.id,
       key,
@@ -199,7 +200,7 @@ export class SalesController {
     @Body() input: PaymentInput,
   ) {
     return this.sales.payment(
-      await this.catalogue.businessId(req),
+      currentBusinessId(req),
       id,
       req.user.id,
       key,
@@ -212,7 +213,7 @@ export class SalesController {
     @Body() input: VersionInput,
   ) {
     return this.pdf.request(
-      await this.catalogue.businessId(req),
+      currentBusinessId(req),
       id,
       input.version,
     );
@@ -223,7 +224,7 @@ export class SalesController {
     @Res()
     res: { setHeader(k: string, v: string): void; send(value: string): void },
   ) {
-    const row = await this.sales.get(await this.catalogue.businessId(req), id);
+    const row = await this.sales.get(currentBusinessId(req), id);
     res.setHeader("Content-Type", "application/json");
     res.setHeader(
       "Content-Disposition",
@@ -249,7 +250,7 @@ export class SalesController {
     res: { setHeader(k: string, v: string): void; send(bytes: Buffer): void },
   ) {
     const { bytes, filename } = await this.pdf.download(
-      await this.catalogue.businessId(req),
+      currentBusinessId(req),
       id,
     );
     res.setHeader("Content-Type", "application/pdf");
@@ -264,7 +265,6 @@ export class SalesController {
 @UseGuards(SessionGuard)
 export class PaymentsController {
   constructor(
-    private readonly catalogue: Catalogue,
     private readonly sales: Sales,
   ) {}
   @ApiHeader({ name: "Idempotency-Key", required: true })
@@ -276,7 +276,7 @@ export class PaymentsController {
     @Body() input: ReasonInput,
   ) {
     return this.sales.reverse(
-      await this.catalogue.businessId(req),
+      currentBusinessId(req),
       id,
       req.user.id,
       key,

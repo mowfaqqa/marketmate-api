@@ -1,9 +1,23 @@
-import { lockBusiness, requireProductCapacity } from './capacity';
-import { BadRequestException, Body, ConflictException, Controller, Get, Injectable, NotFoundException, Param, ParseUUIDPipe, Patch, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  lockBusiness,
+  requireProductCapacity,
+} from '../infrastructure/capacity';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { Database } from './database';
-import { SessionGuard, type Request } from './auth';
-import { ArchiveInput, OfferInput, ProductInput, ProductQuery, ProductUpdate, VersionInput } from './catalogue.dto';
+import { Database } from '../infrastructure/database';
+import {
+  ArchiveInput,
+  OfferInput,
+  ProductInput,
+  ProductQuery,
+  ProductUpdate,
+  VersionInput,
+} from './catalogue.dto';
 
 export const productInclude = {
   primaryAsset: { select: { id: true, width: true, height: true, status: true } },
@@ -28,11 +42,6 @@ export function productView(product: ProductRecord) {
 export class Catalogue {
   constructor(private readonly db: Database) {}
 
-  async businessId(req: Request) {
-    const membership = await this.db.membership.findUnique({ where: { userId: req.user.id } });
-    if (!membership) throw new NotFoundException('Business not found.');
-    return membership.businessId;
-  }
 
   async owned(businessId: string, id: string, tx: Prisma.TransactionClient = this.db) {
     const product = await tx.product.findUnique({ where: { businessId_id: { businessId, id } }, include: productInclude });
@@ -57,18 +66,12 @@ export class Catalogue {
 
   async create(businessId: string, input: ProductInput) {
     const data = this.fields(input);
-    const existing = await this.db.product.findUnique({ where: { businessId_id: { businessId, id: input.clientId } }, include: productInclude });
-    if (existing) {
-      const matches = Object.entries(data).every(([key, value]) => existing[key as keyof typeof existing] === value);
-      if (!matches) throw new ConflictException('This product was already saved with different details. Open the saved product to continue editing.');
-      return productView(existing);
-    }
     try {
       return await this.db.$transaction(async tx => {
         await lockBusiness(tx, businessId);
         const retry = await tx.product.findUnique({ where: { businessId_id: { businessId, id: input.clientId } }, include: productInclude });
         if (retry) {
-          if (!Object.entries(data).every(([key, value]) => retry[key as keyof typeof retry] === value)) throw new ConflictException('This product was saved with different details.');
+          if (!Object.entries(data).every(([key, value]) => retry[key as keyof typeof retry] === value)) throw new ConflictException('This product was already saved with different details. Open the saved product to continue editing.');
           return productView(retry);
         }
         await requireProductCapacity(tx, businessId);
@@ -76,8 +79,6 @@ export class Catalogue {
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        const retry = await this.db.product.findUnique({ where: { businessId_id: { businessId, id: input.clientId } }, include: productInclude });
-        if (retry && Object.entries(data).every(([key, value]) => retry[key as keyof typeof retry] === value)) return productView(retry);
         throw new ConflictException('Unable to save this product. Start a new product and try again.');
       }
       throw error;
@@ -144,30 +145,4 @@ export class Catalogue {
       return productView(await this.owned(businessId, id, tx));
     });
   }
-}
-
-@Controller('products') @UseGuards(SessionGuard)
-export class CatalogueController {
-  constructor(private readonly catalogue: Catalogue) {}
-
-  @Get()
-  async list(@Req() req: Request, @Query() query: ProductQuery) { return this.catalogue.list(await this.catalogue.businessId(req), query); }
-
-  @Post()
-  async create(@Req() req: Request, @Body() input: ProductInput) { return this.catalogue.create(await this.catalogue.businessId(req), input); }
-
-  @Get(':id')
-  async get(@Req() req: Request, @Param('id', ParseUUIDPipe) id: string) { return productView(await this.catalogue.owned(await this.catalogue.businessId(req), id)); }
-
-  @Put(':id')
-  async update(@Req() req: Request, @Param('id', ParseUUIDPipe) id: string, @Body() input: ProductUpdate) { return this.catalogue.update(await this.catalogue.businessId(req), id, input); }
-
-  @Patch(':id/archive')
-  async archive(@Req() req: Request, @Param('id', ParseUUIDPipe) id: string, @Body() input: ArchiveInput) { return this.catalogue.archive(await this.catalogue.businessId(req), id, input); }
-
-  @Put(':id/offer')
-  async offer(@Req() req: Request, @Param('id', ParseUUIDPipe) id: string, @Body() input: OfferInput) { return this.catalogue.saveOffer(await this.catalogue.businessId(req), id, input); }
-
-  @Post(':id/offer/cancel')
-  async cancel(@Req() req: Request, @Param('id', ParseUUIDPipe) id: string, @Body() input: VersionInput) { return this.catalogue.cancelOffer(await this.catalogue.businessId(req), id, input); }
 }
